@@ -619,7 +619,7 @@ fn pixel_value_for_colour(display: *mut xlib::Display, screen: c_int, color: &st
 }
 
 struct XDisplay {
-    display:*mut xlib::Display,
+    d:*mut xlib::Display,
 }
 
 impl XDisplay {
@@ -631,13 +631,13 @@ impl XDisplay {
                 panic!("XOpenDisplay failed");
             }
             XDisplay {
-                display
+                d:display
             }
         }
     }
 
     fn display(&mut self) -> *mut xlib::Display {
-        self.display
+        self.d
     }
 }
 
@@ -645,7 +645,7 @@ impl Drop for XDisplay {
     fn drop(&mut self) {
         unsafe {
             println!("Display closed");
-            xlib::XCloseDisplay(self.display);
+            xlib::XCloseDisplay(self.d);
         }
     }
 }
@@ -658,14 +658,14 @@ fn main() {
         //     panic!("XOpenDisplay failed");
         // }
 
-        let display = XDisplay::new();
+        let mut display = XDisplay::new();
 
         println!(
             "PRIMARY 0x{:02X}",
             xlib::XGetSelectionOwner(
-                display.display,
+                display.display(),
                 xlib::XInternAtom(
-                    display.display,
+                    display.display(),
                     CString::new("PRIMARY").unwrap().to_owned().as_ptr(),
                     0
                 )
@@ -674,9 +674,9 @@ fn main() {
         println!(
             "SECONDARY 0x{:02X}",
             xlib::XGetSelectionOwner(
-                display.display,
+                display.display(),
                 xlib::XInternAtom(
-                    display.display,
+                    display.display(),
                     CString::new("SECONDARY").unwrap().to_owned().as_ptr(),
                     0
                 )
@@ -685,9 +685,9 @@ fn main() {
         println!(
             "CLIPBOARD 0x{:02X}",
             xlib::XGetSelectionOwner(
-                display.display,
+                display.display(),
                 xlib::XInternAtom(
-                    display.display,
+                    display.display(),
                     CString::new("CLIPBOARD").unwrap().to_owned().as_ptr(),
                     0
                 )
@@ -696,9 +696,9 @@ fn main() {
         println!(
             "FOOBAR 0x{:02X}",
             xlib::XGetSelectionOwner(
-                display.display,
+                display.display(),
                 xlib::XInternAtom(
-                    display.display,
+                    display.display(),
                     CString::new("FOOBAR").unwrap().to_owned().as_ptr(),
                     0
                 )
@@ -706,20 +706,20 @@ fn main() {
         );
 
         // Get x11 windows
-        let screen = xlib::XDefaultScreen(display.display);
-        let root = xlib::XRootWindow(display.display, screen);
-        let depth = xlib::XDefaultDepth(display.display, screen);
+        let screen = xlib::XDefaultScreen(display.display());
+        let root = xlib::XRootWindow(display.display(), screen);
+        let depth = xlib::XDefaultDepth(display.display(), screen);
 
         println!("Screen={}, Root={}", screen, root);
         println!(
             "{} x {}",
-            xlib::XDisplayWidth(display.display, screen),
-            xlib::XDisplayHeight(display.display, screen)
+            xlib::XDisplayWidth(display.display(), screen),
+            xlib::XDisplayHeight(display.display(), screen)
         );
         println!(
             "{} x {}",
-            xlib::XDisplayWidthMM(display.display, screen),
-            xlib::XDisplayHeightMM(display.display, screen)
+            xlib::XDisplayWidthMM(display.display(), screen),
+            xlib::XDisplayHeightMM(display.display(), screen)
         );
 
         // Set background to white. Requires uninit since the attribute structure is not initialised except for the background.
@@ -727,7 +727,7 @@ fn main() {
             MaybeUninit::uninit().assume_init();
         let attr_ptr = attributes.as_mut_ptr();
         std::ptr::addr_of_mut!((*attr_ptr).background_pixel)
-            .write(xlib::XWhitePixel(display.display, screen));
+            .write(xlib::XWhitePixel(display.display(), screen));
         let mut attributes = attributes.assume_init();
 
         // Create the window
@@ -741,20 +741,20 @@ fn main() {
             .set_value_mask(xlib::CWBackPixel)
             .set_attributes(&mut attributes)
             .set_title("Hello World".to_string())
-            .create(display.display, root);
+            .create(display.display(), root);
 
         // Hook close requests.
         let wm_protocols_str = CString::new("WM_PROTOCOLS").unwrap();
         let wm_delete_window_str = CString::new("WM_DELETE_WINDOW").unwrap();
 
-        let wm_protocols = xlib::XInternAtom(display.display, wm_protocols_str.as_ptr(), xlib::False);
+        let wm_protocols = xlib::XInternAtom(display.display(), wm_protocols_str.as_ptr(), xlib::False);
         let wm_delete_window =
-            xlib::XInternAtom(display.display, wm_delete_window_str.as_ptr(), xlib::False);
+            xlib::XInternAtom(display.display(), wm_delete_window_str.as_ptr(), xlib::False);
 
         let mut protocols = [wm_delete_window];
 
         xlib::XSetWMProtocols(
-            display.display,
+            display.display(),
             window,
             protocols.as_mut_ptr(),
             protocols.len() as c_int,
@@ -763,7 +763,7 @@ fn main() {
         let mut countret: c_int = 0;
         let fontpat: CString = CString::new("*").unwrap();
         let cfontlist: *mut *mut i8 =
-            xlib::XListFonts(display.display, fontpat.as_ptr(), 10000, &mut countret);
+            xlib::XListFonts(display.display(), fontpat.as_ptr(), 10000, &mut countret);
         println!("Total number of fonts={}", countret);
         // let fontslice = std::slice::from_raw_parts(cfontlist, countret as usize);
         // for part in fontslice {
@@ -776,8 +776,8 @@ fn main() {
         // let fontstr = CString::new("Monospaced").unwrap();
         // let font = xlib::XLoadQueryFont(display, fontstr.as_ptr());
         let fontname = CString::new("lucidasanstypewriter-bold-24").unwrap();
-        let fontid = xlib::XLoadFont(display.display, fontname.as_ptr());
-        let font = xlib::XQueryFont(display.display, fontid);
+        let fontid = xlib::XLoadFont(display.display(), fontname.as_ptr());
+        let font = xlib::XQueryFont(display.display(), fontid);
         println!(
             "FontID=0x{:02X} Properties=0x{:02X?}",
             (*font).fid,
@@ -791,41 +791,41 @@ fn main() {
         // Setup some graphic contexts for different colours
 
         let red_gc = GraphicContextBuilder::default()
-            .set_background_colour(xlib::XWhitePixel(display.display, screen))
-            .set_foreground_colour(pixel_value_for_colour(display.display, screen, "red"))
-            .set_font_from_string(display.display, "lucidasanstypewriter-bold-24")
-            .create(display.display, window);
+            .set_background_colour(xlib::XWhitePixel(display.display(), screen))
+            .set_foreground_colour(pixel_value_for_colour(display.display(), screen, "red"))
+            .set_font_from_string(display.display(), "lucidasanstypewriter-bold-24")
+            .create(display.display(), window);
 
         let green_gc = GraphicContextBuilder::default()
-            .set_background_colour(xlib::XWhitePixel(display.display, screen))
-            .set_foreground_colour(pixel_value_for_colour(display.display, screen, "green"))
-            .set_font_from_string(display.display, "lucidasanstypewriter-bold-24")
-            .create(display.display, window);
+            .set_background_colour(xlib::XWhitePixel(display.display(), screen))
+            .set_foreground_colour(pixel_value_for_colour(display.display(), screen, "green"))
+            .set_font_from_string(display.display(), "lucidasanstypewriter-bold-24")
+            .create(display.display(), window);
 
         let blue_gc = GraphicContextBuilder::default()
-            .set_background_colour(xlib::XWhitePixel(display.display, screen))
-            .set_foreground_colour(pixel_value_for_colour(display.display, screen, "purple"))
-            .set_font_from_string(display.display, "lucidasanstypewriter-bold-24")
-            .create(display.display, window);
+            .set_background_colour(xlib::XWhitePixel(display.display(), screen))
+            .set_foreground_colour(pixel_value_for_colour(display.display(), screen, "purple"))
+            .set_font_from_string(display.display(), "lucidasanstypewriter-bold-24")
+            .create(display.display(), window);
 
         let white_gc = GraphicContextBuilder::default()
-            .set_background_colour(xlib::XWhitePixel(display.display, screen))
-            .set_foreground_colour(xlib::XWhitePixel(display.display, screen))
-            .set_font_from_string(display.display, "lucidasanstypewriter-bold-24")
-            .create(display.display, window);
+            .set_background_colour(xlib::XWhitePixel(display.display(), screen))
+            .set_foreground_colour(xlib::XWhitePixel(display.display(), screen))
+            .set_font_from_string(display.display(), "lucidasanstypewriter-bold-24")
+            .create(display.display(), window);
 
         let black_gc = GraphicContextBuilder::default()
-            .set_background_colour(xlib::XWhitePixel(display.display, screen))
-            .set_foreground_colour(xlib::XBlackPixel(display.display, screen))
-            .set_font_from_string(display.display, "lucidasanstypewriter-bold-24")
-            .create(display.display, window);
+            .set_background_colour(xlib::XWhitePixel(display.display(), screen))
+            .set_foreground_colour(xlib::XBlackPixel(display.display(), screen))
+            .set_font_from_string(display.display(), "lucidasanstypewriter-bold-24")
+            .create(display.display(), window);
 
         let mut gc = black_gc;
 
         // Show window.
-        xlib::XMapWindow(display.display, window);
+        xlib::XMapWindow(display.display(), window);
         xlib::XSelectInput(
-            display.display,
+            display.display(),
             window,
             xlib::ExposureMask
                 | xlib::KeyPressMask
@@ -842,7 +842,7 @@ fn main() {
         let mut k: bool = false;
         let mut event: xlib::XEvent = mem::MaybeUninit::uninit().assume_init();
         loop {
-            xlib::XNextEvent(display.display, &mut event);
+            xlib::XNextEvent(display.display(), &mut event);
 
             let xtype: c_int = event.get_type();
             match xtype {
@@ -861,7 +861,7 @@ fn main() {
                 }
                 xlib::KeyPress => {
                     let xkey = xlib::XKeyEvent::from(event);
-                    let xsym = xlib::XKeycodeToKeysym(display.display, xkey.keycode.try_into().unwrap(), 0);
+                    let xsym = xlib::XKeycodeToKeysym(display.display(), xkey.keycode.try_into().unwrap(), 0);
                     let xstr = std::ffi::CStr::from_ptr(xlib::XKeysymToString(xsym))
                         .to_owned()
                         .into_string()
@@ -875,7 +875,7 @@ fn main() {
                 }
                 xlib::KeyRelease => {
                     let xkey = xlib::XKeyEvent::from(event);
-                    let xsym = xlib::XKeycodeToKeysym(display.display, xkey.keycode.try_into().unwrap(), 0);
+                    let xsym = xlib::XKeycodeToKeysym(display.display(), xkey.keycode.try_into().unwrap(), 0);
                     if xsym != xlib::NoSymbol.try_into().unwrap() {
                         if xsym == 113 {
                             return;
@@ -887,7 +887,7 @@ fn main() {
                 xlib::ButtonPress => {
                     if x != -1 && y != -1 {
                         xlib::XDrawString(
-                            display.display,
+                            display.display(),
                             window,
                             white_gc,
                             x,
@@ -917,7 +917,7 @@ fn main() {
                     b = true;
                     println!("Button {} {} {}", xbutton.button, x, y);
                     xlib::XDrawString(
-                        display.display,
+                        display.display(),
                         window,
                         gc,
                         x,
@@ -932,7 +932,7 @@ fn main() {
                 xlib::ButtonRelease => {
                     b = false;
                     xlib::XDrawString(
-                        display.display,
+                        display.display(),
                         window,
                         white_gc,
                         x,
@@ -952,7 +952,7 @@ fn main() {
                     if b {
                         if x != -1 && y != -1 {
                             xlib::XDrawString(
-                                display.display,
+                                display.display(),
                                 window,
                                 white_gc,
                                 x,
@@ -967,7 +967,7 @@ fn main() {
                         x = xmotion.x;
                         y = xmotion.y;
                         xlib::XDrawString(
-                            display.display,
+                            display.display(),
                             window,
                             gc,
                             x,
@@ -980,9 +980,9 @@ fn main() {
                         );
                     }
                     if k {
-                        xlib::XDrawPoint(display.display, window, black_gc, x, y);
+                        xlib::XDrawPoint(display.display(), window, black_gc, x, y);
                     } else {
-                        xlib::XDrawPoint(display.display, window, white_gc, x, y);
+                        xlib::XDrawPoint(display.display(), window, white_gc, x, y);
                     }
                 }
                 xlib::Expose => {
@@ -995,6 +995,6 @@ fn main() {
         }
 
         // Shut down.
-        // xlib::XCloseDisplay(display.display);
+        // xlib::XCloseDisplay(display.display());
     }
 }
