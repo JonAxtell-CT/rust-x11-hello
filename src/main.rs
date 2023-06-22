@@ -1,4 +1,7 @@
+extern crate num;
 extern crate x11;
+#[macro_use]
+extern crate num_derive;
 
 use std::ffi::CString;
 use std::mem::{self, MaybeUninit};
@@ -7,7 +10,239 @@ use std::os::raw::*;
 use std::ptr::{self, null_mut};
 use x11::xlib;
 
-#[derive(Copy, Clone, PartialEq)]
+//=================================================================================================================================
+//
+//
+// _XDisplay structure from https://xwindow.angelfire.com/page28.html
+// struct _XDisplay
+// {
+// 	XExtData *ext_data;	/* hook for extension to hang data */
+// 	struct _XFreeFuncs *free_funcs; /* internal free functions */
+// 	int fd;			/* Network socket. */
+// 	int conn_checker;         /* ugly thing used by _XEventsQueued */
+// 	int proto_major_version;/* maj. version of server's X protocol */
+// 	int proto_minor_version;/* minor version of server's X protocol */
+// 	char *vendor;		/* vendor of the server hardware */
+//         XID resource_base;	/* resource ID base */
+// 	XID resource_mask;	/* resource ID mask bits */
+// 	XID resource_id;	/* allocator current ID */
+// 	int resource_shift;	/* allocator shift to correct bits */
+// 	XID (*resource_alloc)(	/* allocator function */
+// 		struct _XDisplay*
+// 		);
+// 	int byte_order;		/* screen byte order, LSBFirst, MSBFirst */
+// 	int bitmap_unit;	/* padding and data requirements */
+// 	int bitmap_pad;		/* padding requirements on bitmaps */
+// 	int bitmap_bit_order;	/* LeastSignificant or MostSignificant */
+// 	int nformats;		/* number of pixmap formats in list */
+// 	ScreenFormat *pixmap_format;	/* pixmap format list */
+// 	int vnumber;		/* Xlib's X protocol version number. */
+// 	int release;		/* release of the server */
+// 	struct _XSQEvent *head, *tail;	/* Input event queue. */
+// 	int qlen;		/* Length of input event queue */
+// 	unsigned long last_request_read; /* seq number of last event read */
+// 	unsigned long request;	/* sequence number of last request. */
+// 	char *last_req;		/* beginning of last request, or dummy */
+// 	char *buffer;		/* Output buffer starting address. */
+// 	char *bufptr;		/* Output buffer index pointer. */
+// 	char *bufmax;		/* Output buffer maximum+1 address. */
+// 	unsigned max_request_size; /* maximum number 32 bit words in request*/
+// 	struct _XrmHashBucketRec *db;
+// 	int (*synchandler)(	/* Synchronization handler */
+// 		struct _XDisplay*
+// 		);
+// 	char *display_name;	/* "host:display" string used on this connect*/
+// 	int default_screen;	/* default screen for operations */
+// 	int nscreens;		/* number of screens on this server*/
+// 	Screen *screens;	/* pointer to list of screens */
+// 	unsigned long motion_buffer;	/* size of motion buffer */
+// 	unsigned long flags;	   /* internal connection flags */
+// 	int min_keycode;	/* minimum defined keycode */
+// 	int max_keycode;	/* maximum defined keycode */
+// 	KeySym *keysyms;	/* This server's keysyms */
+// 	XModifierKeymap *modifiermap;	/* This server's modifier keymap */
+// 	int keysyms_per_keycode;/* number of rows */
+// 	char *xdefaults;	/* contents of defaults from server */
+// 	char *scratch_buffer;	/* place to hang scratch buffer */
+// 	unsigned long scratch_length;	/* length of scratch buffer */
+// 	int ext_number;		/* extension number on this display */
+// 	struct _XExten *ext_procs; /* extensions initialized on this display */
+// 	/*
+// 	 * the following can be fixed size, as the protocol defines how
+// 	 * much address space is available.
+// 	 * While this could be done using the extension vector, there
+// 	 * may be MANY events processed, so a search through the extension
+// 	 * list to find the right procedure for each event might be
+// 	 * expensive if many extensions are being used.
+// 	 */
+// 	Bool (*event_vec[128])(	/* vector for wire to event */
+// 		Display *	/* dpy */,
+// 		XEvent *	/* re */,
+// 		xEvent *	/* event */
+// 		);
+// 	Status (*wire_vec[128])( /* vector for event to wire */
+// 		Display *	/* dpy */,
+// 		XEvent *	/* re */,
+// 		xEvent *	/* event */
+// 		);
+// 	KeySym lock_meaning;	   /* for XLookupString */
+// 	struct _XLockInfo *lock;   /* multi-thread state, display lock */
+// 	struct _XInternalAsync *async_handlers; /* for internal async */
+// 	unsigned long bigreq_size; /* max size of big requests */
+// 	struct _XLockPtrs *lock_fns; /* pointers to threads functions */
+// 	void (*idlist_alloc)(	   /* XID list allocator function */
+// 		Display *	/* dpy */,
+// 		XID *		/* ids */,
+// 		int		/* count */
+// 		);
+// 	/* things above this line should not move, for binary compatibility */
+// 	struct _XKeytrans *key_bindings; /* for XLookupString */
+// 	Font cursor_font;	   /* for XCreateFontCursor */
+// 	struct _XDisplayAtoms *atoms; /* for XInternAtom */
+// 	unsigned int mode_switch;  /* keyboard group modifiers */
+// 	unsigned int num_lock;  /* keyboard numlock modifiers */
+// 	struct _XContextDB *context_db; /* context database */
+// 	Bool (**error_vec)(	/* vector for wire to error */
+// 		Display     *	/* display */,
+// 		XErrorEvent *	/* he */,
+// 		xError      *	/* we */
+// 		);
+// 	/*
+// 	 * Xcms information
+// 	 */
+// 	struct {
+// 	   XPointer defaultCCCs;  /* pointer to an array of default XcmsCCC */
+// 	   XPointer clientCmaps;  /* pointer to linked list of XcmsCmapRec */
+// 	   XPointer perVisualIntensityMaps;
+// 				  /* linked list of XcmsIntensityMap */
+// 	} cms;
+// 	struct _XIMFilter *im_filters;
+// 	struct _XSQEvent *qfree; /* unallocated event queue elements */
+// 	unsigned long next_event_serial_num; /* inserted into next queue elt */
+// 	struct _XExten *flushes; /* Flush hooks */
+// 	struct _XConnectionInfo *im_fd_info; /* _XRegisterInternalConnection */
+// 	int im_fd_length;	/* number of im_fd_info */
+// 	struct _XConnWatchInfo *conn_watchers; /* XAddConnectionWatch */
+// 	int watcher_count;	/* number of conn_watchers */
+// 	XPointer filedes;	/* struct pollfd cache for _XWaitForReadable */
+// 	int (*savedsynchandler)( /* user synchandler when Xlib usurps */
+// 		Display *	/* dpy */
+// 		);
+// 	XID resource_max;	/* allocator max ID */
+// 	int xcmisc_opcode;	/* major opcode for XC-MISC */
+// 	struct _XkbInfoRec *xkb_info; /* XKB info */
+// 	struct _XtransConnInfo *trans_conn; /* transport connection object */
+// };
+
+#[derive(Copy, Clone, PartialEq, Debug)]
+#[repr(C)]
+struct XDisplay_cms {
+    defaultcccs: *mut c_char, /* pointer to an array of default XcmsCCC */
+    clientcmaps: *mut c_char, /* pointer to linked list of XcmsCmapRec */
+    pervisualintensitymaps: *mut c_char,
+    /* linked list of XcmsIntensityMap */
+}
+
+#[derive(Copy, Clone, PartialEq, Debug)]
+#[repr(C)]
+struct XDisplay {
+    ext_data: *const c_void,       /* hook for extension to hang data */
+    free_funcs: *const c_void,     /* internal free functions */
+    fd: c_int,                     /* Network socket. */
+    conn_checker: c_int,           /* ugly thing used by _XEventsQueued */
+    proto_major_version: c_int,    /* maj. version of server's X protocol */
+    proto_minor_version: c_int,    /* minor version of server's X protocol */
+    vendor: *const c_char,         /* vendor of the server hardware */
+    resource_base: c_ulong,        /* resource ID base */
+    resource_mask: c_ulong,        /* resource ID mask bits */
+    resource_id: c_ulong,          /* allocator current ID */
+    resource_shift: c_int,         /* allocator shift to correct bits */
+    resource_alloc: *const c_void, /* allocator function */
+    byte_order: c_int,             /* screen byte order, LSBFirst, MSBFirst */
+    bitmap_unit: c_int,            /* padding and data requirements */
+    bitmap_pad: c_int,             /* padding requirements on bitmaps */
+    bitmap_bit_order: c_int,       /* LeastSignificant or MostSignificant */
+    nformats: c_int,               /* number of pixmap formats in list */
+    pixmap_format: *const c_void,  /* pixmap format list */
+    vnumber: c_int,                /* Xlib's X protocol version number. */
+    release: c_int,                /* release of the server */
+    head: *const c_void,
+    tail: *const c_void,        /* Input event queue. */
+    qlen: c_int,                /* Length of input event queue */
+    last_request_read: c_ulong, /* seq number of last event read */
+    request: c_ulong,           /* sequence number of last request. */
+    last_req: *const i8,        /* beginning of last request, or dummy */
+    buffer: *const i8,          /* Output buffer starting address. */
+    bufptr: *const i8,          /* Output buffer index pointer. */
+    bufmax: *const i8,          /* Output buffer maximum+1 address. */
+    max_request_size: c_uint,   /* maximum number 32 bit words in request*/
+    db: *const c_void,
+    synchandler: *const c_void,   /* Synchronization handler */
+    display_name: *const i8,      /* "host:display" string used on this connect*/
+    default_screen: c_int,        /* default screen for operations */
+    nscreens: c_int,              /* number of screens on this server*/
+    screens: *const xlib::Screen, /* pointer to list of screens */
+    motion_buffer: c_ulong,       /* size of motion buffer */
+    flags: c_ulong,               /* internal connection flags */
+    min_keycode: c_int,           /* minimum defined keycode */
+    max_keycode: c_int,           /* maximum defined keycode */
+    keysyms: *const c_void,       /* This server's keysyms */
+    modifiermap: *const c_void,   /* This server's modifier keymap */
+    keysyms_per_keycode: c_int,   /* number of rows */
+    xdefaults: *const i8,         /* contents of defaults from server */
+    scratch_buffer: *const i8,    /* place to hang scratch buffer */
+    scratch_length: c_ulong,      /* length of scratch buffer */
+    ext_number: c_int,            /* extension number on this display */
+    ext_procs: *const c_void,     /* extensions initialized on this display */
+    /*
+     * the following can be fixed size, as the protocol defines how
+     * much address space is available.
+     * While this could be done using the extension vector, there
+     * may be MANY events processed, so a search through the extension
+     * list to find the right procedure for each event might be
+     * expensive if many extensions are being used.
+     */
+    event_vec: [*const c_void; 128], /* vector for wire to event */
+    wire_vec: [*const c_void; 128],  /* vector for event to wire */
+    lock_meaning: c_ulong,           /* for XLookupString */
+    lock: *const c_void,             /* multi-thread state, display lock */
+    async_handlers: *const c_void,   /* for internal async */
+    bigreq_size: c_ulong,            /* max size of big requests */
+    lock_fns: *const c_void,         /* pointers to threads functions */
+    idlist_alloc: *const c_void,     /* XID list allocator function */
+    /* things above this line should not move, for binary compatibility */
+    key_bindings: *const c_void,     /* for XLookupString */
+    cursor_font: c_ulong,            /* for XCreateFontCursor */
+    atoms: *const c_void,            /* for XInternAtom */
+    mode_switch: c_uint,             /* keyboard group modifiers */
+    num_lock: c_uint,                /* keyboard numlock modifiers */
+    context_db: *const c_void,       /* context database */
+    error_vec: *const *const c_void, /* vector for wire to error */
+    /*
+     * Xcms information
+     */
+    cms: XDisplay_cms,
+    im_filters: *const c_void,
+    qfree: *const c_void,            /* unallocated event queue elements */
+    next_event_serial_num: c_ulong,  /* inserted into next queue elt */
+    flushes: *const c_void,          /* Flush hooks */
+    im_fd_info: *const c_void,       /* _XRegisterInternalConnection */
+    im_fd_length: c_int,             /* number of im_fd_info */
+    conn_watchers: *const c_void,    /* XAddConnectionWatch */
+    watcher_count: c_int,            /* number of conn_watchers */
+    filedes: *mut c_char,            /* struct pollfd cache for _XWaitForReadable */
+    savedsynchandler: *const c_void, /* user synchandler when Xlib usurps */
+    resource_max: c_ulong,           /* allocator max ID */
+    xcmisc_opcode: c_int,            /* major opcode for XC-MISC */
+    xkb_info: *const c_void,         /* XKB info */
+    trans_conn: *const c_void,       /* transport connection object */
+}
+
+//=================================================================================================================================
+//
+// Graphic functions
+//
+#[derive(Copy, Clone, PartialEq, Debug)]
 #[allow(dead_code)]
 enum GraphicContextFunctions {
     GXclear = 0x0,
@@ -28,8 +263,11 @@ enum GraphicContextFunctions {
     GXset = 0xf,
 }
 
+//=================================================================================================================================
+//
 // LineStyle
-#[derive(Copy, Clone, PartialEq)]
+//
+#[derive(Copy, Clone, PartialEq, Debug)]
 #[allow(dead_code)]
 enum GraphicContextLineStyles {
     LineSolid = 0,
@@ -38,7 +276,7 @@ enum GraphicContextLineStyles {
 }
 
 // capStyle
-#[derive(Copy, Clone, PartialEq)]
+#[derive(Copy, Clone, PartialEq, Debug)]
 #[allow(dead_code)]
 enum GraphicContextCapStyles {
     CapNotLast = 0,
@@ -47,8 +285,11 @@ enum GraphicContextCapStyles {
     CapProjecting = 3,
 }
 
+//=================================================================================================================================
+//
 // joinStyle
-#[derive(Copy, Clone, PartialEq)]
+//
+#[derive(Copy, Clone, PartialEq, Debug)]
 #[allow(dead_code)]
 enum GraphicContextJoinStyles {
     JoinMiter = 0,
@@ -56,8 +297,11 @@ enum GraphicContextJoinStyles {
     JoinBevel = 2,
 }
 
+//=================================================================================================================================
+//
 // fillStyle
-#[derive(Copy, Clone, PartialEq)]
+//
+#[derive(Copy, Clone, PartialEq, Debug)]
 #[allow(dead_code)]
 enum GraphicContextFillStyles {
     FillSolid = 0,
@@ -66,48 +310,127 @@ enum GraphicContextFillStyles {
     FillOpaqueStippled = 3,
 }
 
+//=================================================================================================================================
+//
 // fillRule
-#[derive(Copy, Clone, PartialEq)]
+//
+#[derive(Copy, Clone, PartialEq, Debug)]
 #[allow(dead_code)]
 enum GraphicContextFillRules {
     EvenOddRule = 0,
     WindingRule = 1,
 }
 
+//=================================================================================================================================
+//
 // Arc modes for PolyFillArc
-#[derive(Copy, Clone, PartialEq)]
+//
+#[derive(Copy, Clone, PartialEq, Debug)]
 #[allow(dead_code)]
 enum GraphicContextArcModes {
     ArcChord = 0,
     ArcPieSlice = 1,
 }
 
+//=================================================================================================================================
+//
 // subwindow mode
-#[derive(Copy, Clone, PartialEq)]
+//
+#[derive(Copy, Clone, PartialEq, Debug)]
 #[allow(dead_code)]
 enum GraphicContextSubWindowModes {
     ClipByChildren = 0,
     IncludeInferiors = 1,
 }
 
+//=================================================================================================================================
+//
 // Graphic exposure
-#[derive(Copy, Clone, PartialEq)]
+//
+#[derive(Copy, Clone, PartialEq, Debug)]
 #[allow(dead_code)]
 enum GraphicContextGraphicExposure {
     CopyArea = 0,
     CopyPlane = 1,
 }
 
+//=================================================================================================================================
+//
 // window classes
-#[derive(Copy, Clone, PartialEq)]
+//
+#[derive(Copy, Clone, PartialEq, Debug)]
 #[allow(dead_code)]
 enum WindowClasses {
     InputOutput = 1,
     InputOnly = 2,
 }
 
-/// Structure that maps to the C structure in X11 as closely as possible
-#[derive(Copy, Clone, PartialEq)]
+//#################################################################################################################################
+//
+// Error codes
+//
+// To convert from an integer to the enum use the following trick which makes use of the num and num_derive crates.
+//      let error_code:ErrorCodes = num::FromPrimitive::from_i32(xlib::XFunctionThatReturns_i32).unwrap();
+//
+// The fmt function of the Display trait is implemented to allow the human readable form of the error code to be output.
+//      println!("Result={}", error_code);
+//
+#[derive(Debug, Copy, Clone, PartialEq, FromPrimitive)]
+#[allow(dead_code)]
+enum ErrorCodes {
+    Success = 0,
+    BadRequest = 1,
+    BadValue = 2,
+    BadWindow = 3,
+    BadPixmap = 4,
+    BadAtom = 5,
+    BadCursor = 6,
+    BadFont = 7,
+    BadMatch = 8,
+    BadDrawable = 9,
+    BadAccess = 10,
+    BadAlloc = 11,
+    BadColor = 12,
+    BadGC = 13,
+    BadIDChoice = 14,
+    BadName = 15,
+    BadLength = 16,
+    BadImplementation = 17,
+    FirstExtensionError = 128,
+    LastExtensionError = 255,
+}
+
+impl std::fmt::Display for ErrorCodes {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            ErrorCodes::Success => write!(f, "Success"),
+            ErrorCodes::BadRequest => write!(f, "BadRequest"),
+            ErrorCodes::BadValue => write!(f, "BadValue"),
+            ErrorCodes::BadWindow => write!(f, "BadWindow"),
+            ErrorCodes::BadPixmap => write!(f, "BadPixmap"),
+            ErrorCodes::BadAtom => write!(f, "BadAtom"),
+            ErrorCodes::BadCursor => write!(f, "BadCursor"),
+            ErrorCodes::BadFont => write!(f, "BadFont"),
+            ErrorCodes::BadMatch => write!(f, "BadMatch"),
+            ErrorCodes::BadDrawable => write!(f, "BadRequeBadDrawablest"),
+            ErrorCodes::BadAccess => write!(f, "BadAccess"),
+            ErrorCodes::BadAlloc => write!(f, "BadAlloc"),
+            ErrorCodes::BadColor => write!(f, "BadColor"),
+            ErrorCodes::BadGC => write!(f, "BadGC"),
+            ErrorCodes::BadIDChoice => write!(f, "BadIDChoice"),
+            ErrorCodes::BadName => write!(f, "BadName"),
+            ErrorCodes::BadLength => write!(f, "BadLength"),
+            ErrorCodes::BadImplementation => write!(f, "BadImplementation"),
+            _ => write!(f, ""),
+        }
+    }
+}
+
+//#################################################################################################################################
+//
+// Structure that maps to the C structure in X11 as closely as possible
+//
+#[derive(Copy, Clone, PartialEq, Debug)]
 #[allow(dead_code)]
 struct GraphicContextComponents {
     /// Logical function
@@ -176,42 +499,68 @@ struct GraphicContextComponents {
     pub dashes: c_char,
 }
 
-#[derive(Copy, Clone, PartialEq)]
+impl Default for GraphicContextComponents {
+    fn default() -> Self {
+        GraphicContextComponents {
+            function: xlib::GXcopy,
+            plane_mask: 0xFFFFFFFF,
+            foreground: 0,
+            background: 1,
+            line_width: 0,
+            line_style: xlib::LineSolid,
+            cap_style: xlib::CapButt,
+            join_style: xlib::JoinMiter,
+            fill_style: xlib::FillSolid,
+            fill_rule: xlib::EvenOddRule,
+            arc_mode: xlib::ArcPieSlice,
+            tile: 0,
+            stipple: 0,
+            ts_x_origin: 0,
+            ts_y_origin: 0,
+            font: 0,
+            subwindow_mode: xlib::ClipByChildren,
+            graphics_exposures: true,
+            clip_x_origin: 0,
+            clip_y_origin: 0,
+            clip_mask: 0,
+            dash_offset: 0,
+            dashes: 4,
+        }
+    }
+}
+
+//#################################################################################################################################
+//
+// Graphic context builder
+//
+// Sets up the arguments for the XCreateGC call allowing default values for arguments to be used without having to specify all
+// the arguments. Some components must be specified such as the font. The default function is called first and any arguments that
+// need to be set can be chained of it. The last function in the chain must be create.
+//
+// Example:
+// The following uses keeps everything at default except the foreground and background colours.
+//
+//      let black_on_white_gc = GraphicContextBuilder::default()
+//          .set_background_colour(xlib::XWhitePixel(display.display(), display.screen()))
+//          .set_foreground_colour(xlib::XBlackPixel(display.display(), display.screen()))
+//          .set_font(fontinfo.id())
+//          .create(display.display(), window);
+
+//
+#[derive(Copy, Clone, PartialEq, Debug)]
 #[allow(dead_code)]
 struct GraphicContextBuilder {
     components: GraphicContextComponents,
     used: u32,
+    must_exist: u32,
 }
 
 impl Default for GraphicContextBuilder {
     fn default() -> Self {
         GraphicContextBuilder {
-            components: GraphicContextComponents {
-                function: xlib::GXcopy,
-                plane_mask: 0xFFFFFFFF,
-                foreground: 0,
-                background: 1,
-                line_width: 0,
-                line_style: xlib::LineSolid,
-                cap_style: xlib::CapButt,
-                join_style: xlib::JoinMiter,
-                fill_style: xlib::FillSolid,
-                fill_rule: xlib::EvenOddRule,
-                arc_mode: xlib::ArcPieSlice,
-                tile: 0,
-                stipple: 0,
-                ts_x_origin: 0,
-                ts_y_origin: 0,
-                font: 0,
-                subwindow_mode: xlib::ClipByChildren,
-                graphics_exposures: true,
-                clip_x_origin: 0,
-                clip_y_origin: 0,
-                clip_mask: 0,
-                dash_offset: 0,
-                dashes: 4,
-            },
+            components: GraphicContextComponents::default(),
             used: 0,
+            must_exist: xlib::GCFont,
         }
     }
 }
@@ -257,7 +606,7 @@ impl GraphicContextBuilder {
                 line_width,
                 ..self.components
             },
-            used: self.used | xlib::GCBackground,
+            used: self.used | xlib::GCLineWidth,
             ..self
         }
     }
@@ -268,7 +617,7 @@ impl GraphicContextBuilder {
                 line_style: line_style as i32,
                 ..self.components
             },
-            used: self.used | xlib::GCBackground,
+            used: self.used | xlib::GCLineStyle,
             ..self
         }
     }
@@ -279,7 +628,7 @@ impl GraphicContextBuilder {
                 cap_style: cap_style as i32,
                 ..self.components
             },
-            used: self.used | xlib::GCBackground,
+            used: self.used | xlib::GCCapStyle,
             ..self
         }
     }
@@ -290,7 +639,7 @@ impl GraphicContextBuilder {
                 join_style: join_style as i32,
                 ..self.components
             },
-            used: self.used | xlib::GCBackground,
+            used: self.used | xlib::GCJoinStyle,
             ..self
         }
     }
@@ -301,7 +650,7 @@ impl GraphicContextBuilder {
                 fill_style: fill_style as i32,
                 ..self.components
             },
-            used: self.used | xlib::GCBackground,
+            used: self.used | xlib::GCFillStyle,
             ..self
         }
     }
@@ -312,7 +661,7 @@ impl GraphicContextBuilder {
                 fill_rule: fill_rule as i32,
                 ..self.components
             },
-            used: self.used | xlib::GCBackground,
+            used: self.used | xlib::GCFillRule,
             ..self
         }
     }
@@ -323,7 +672,7 @@ impl GraphicContextBuilder {
                 arc_mode: arc_mode as i32,
                 ..self.components
             },
-            used: self.used | xlib::GCBackground,
+            used: self.used | xlib::GCArcMode,
             ..self
         }
     }
@@ -334,7 +683,7 @@ impl GraphicContextBuilder {
                 tile: tile,
                 ..self.components
             },
-            used: self.used | xlib::GCBackground,
+            used: self.used | xlib::GCTile,
             ..self
         }
     }
@@ -345,7 +694,7 @@ impl GraphicContextBuilder {
                 stipple: stipple,
                 ..self.components
             },
-            used: self.used | xlib::GCBackground,
+            used: self.used | xlib::GCStipple,
             ..self
         }
     }
@@ -357,27 +706,12 @@ impl GraphicContextBuilder {
                 ts_y_origin: y,
                 ..self.components
             },
-            used: self.used | xlib::GCBackground,
+            used: self.used | xlib::GCTileStipXOrigin | xlib::GCTileStipYOrigin,
             ..self
         }
     }
 
-    pub fn set_font_from_string(self, display: *mut xlib::Display, name: &str) -> Self {
-        unsafe {
-            let name = CString::new(name).unwrap();
-            let font = xlib::XLoadFont(display, name.as_ptr());
-            GraphicContextBuilder {
-                components: GraphicContextComponents {
-                    font,
-                    ..self.components
-                },
-                used: self.used | xlib::GCFont,
-                ..self
-            }
-        }
-    }
-
-    pub fn set_font_from_id(self, font: xlib::Font) -> Self {
+    pub fn set_font(self, font: xlib::Font) -> Self {
         GraphicContextBuilder {
             components: GraphicContextComponents {
                 font,
@@ -394,7 +728,7 @@ impl GraphicContextBuilder {
                 subwindow_mode: subwindow_mode as i32,
                 ..self.components
             },
-            used: self.used | xlib::GCBackground,
+            used: self.used | xlib::GCSubwindowMode,
             ..self
         }
     }
@@ -408,7 +742,7 @@ impl GraphicContextBuilder {
                 },
                 ..self.components
             },
-            used: self.used | xlib::GCBackground,
+            used: self.used | xlib::GCGraphicsExposures,
             ..self
         }
     }
@@ -420,7 +754,7 @@ impl GraphicContextBuilder {
                 clip_y_origin: y,
                 ..self.components
             },
-            used: self.used | xlib::GCBackground,
+            used: self.used | xlib::GCClipXOrigin | xlib::GCClipYOrigin,
             ..self
         }
     }
@@ -431,7 +765,7 @@ impl GraphicContextBuilder {
                 clip_mask,
                 ..self.components
             },
-            used: self.used | xlib::GCBackground,
+            used: self.used | xlib::GCClipMask,
             ..self
         }
     }
@@ -442,7 +776,7 @@ impl GraphicContextBuilder {
                 dash_offset,
                 ..self.components
             },
-            used: self.used | xlib::GCBackground,
+            used: self.used | xlib::GCDashOffset,
             ..self
         }
     }
@@ -453,12 +787,15 @@ impl GraphicContextBuilder {
                 dashes,
                 ..self.components
             },
-            used: self.used | xlib::GCBackground,
+            used: self.used | xlib::GCDashList,
             ..self
         }
     }
 
     pub fn create(self, display: *mut xlib::Display, window: xlib::Window) -> xlib::GC {
+        if self.used & self.must_exist == 0 {
+            panic!("Required graphic context components not specified");
+        }
         unsafe {
             let xgcvalue: MaybeUninit<xlib::XGCValues> = MaybeUninit::uninit();
             let mut xgcvalue = xgcvalue.assume_init();
@@ -487,22 +824,201 @@ impl GraphicContextBuilder {
             xgcvalue.dash_offset = self.components.dash_offset;
             xgcvalue.dashes = self.components.dashes;
 
-            let gc = xlib::XCreateGC(
-                display,
-                window,
-                self.used.try_into().unwrap(),
-                &mut xgcvalue,
-            );
+            let gc = xlib::XCreateGC(display, window, self.used as u64, &mut xgcvalue);
             gc
         }
     }
 }
 
-#[derive(Clone, PartialEq)]
+//#################################################################################################################################
+//
+// Window attributes and its builder
+//
+// The attributes are used when a window is created. The XCreateWindow uses two arguments to set the attributes, a flag and a
+// structure with the flag indicating which fields in the structure are actually in use. The window attribute builder will set
+// the flag and the appropriate field in the structure. The two components will then be passed as seperate arguments when the
+// window is created.
+//
+#[allow(dead_code, non_snake_case)]
+pub mod WindowAttributes {
+    use std::ffi::c_ulong;
+
+    pub const CWBACK_PIXMAP: c_ulong = 0x0001;
+    pub const CWBACK_PIXEL: c_ulong = 0x0002;
+    pub const CWBORDER_PIXMAP: c_ulong = 0x0004;
+    pub const CWBORDER_PIXEL: c_ulong = 0x0008;
+    pub const CWBIT_GRAVITY: c_ulong = 0x0010;
+    pub const CWWIN_GRAVITY: c_ulong = 0x0020;
+    pub const CWBACKING_STORE: c_ulong = 0x0040;
+    pub const CWBACKING_PLANES: c_ulong = 0x0080;
+    pub const CWBACKING_PIXEL: c_ulong = 0x0100;
+    pub const CWOVERRIDE_REDIRECT: c_ulong = 0x0200;
+    pub const CWSAVE_UNDER: c_ulong = 0x0400;
+    pub const CWEVENT_MASK: c_ulong = 0x0800;
+    pub const CWDONT_PROPAGATE: c_ulong = 0x1000;
+    pub const CWCOLORMAP: c_ulong = 0x2000;
+    pub const CWCURSOR: c_ulong = 0x4000;
+}
+
+#[derive(Copy, Clone, PartialEq, Debug)]
+#[allow(dead_code)]
+struct WindowAttributeBuilder {
+    mask: c_ulong,
+    attributes: xlib::XSetWindowAttributes,
+}
+
+impl Default for WindowAttributeBuilder {
+    fn default() -> Self {
+        WindowAttributeBuilder {
+            mask: num::FromPrimitive::from_i32(0).unwrap(),
+            attributes: xlib::XSetWindowAttributes {
+                background_pixmap: 0,
+                background_pixel: 0,
+                border_pixmap: 0,
+                border_pixel: 0,
+                bit_gravity: 0,
+                win_gravity: 0,
+                backing_store: 0,
+                backing_planes: 0,
+                backing_pixel: 0,
+                save_under: 0,
+                event_mask: 0,
+                do_not_propagate_mask: 0,
+                override_redirect: 0,
+                colormap: 0,
+                cursor: 0,
+            },
+        }
+    }
+}
+
+#[allow(dead_code)]
+impl WindowAttributeBuilder {
+    // let mut attributes: MaybeUninit<xlib::XSetWindowAttributes> =
+    // MaybeUninit::uninit().assume_init();
+    // let attr_ptr = attributes.as_mut_ptr();
+    // std::ptr::addr_of_mut!((*attr_ptr).background_pixel)
+    // .write(xlib::XWhitePixel(display.display(), display.screen()));
+    // let mut attributes = attributes.assume_init();
+
+    fn back_pixmap(&mut self, back_pixmap: u64) -> Self {
+        self.mask = self.mask | WindowAttributes::CWBACK_PIXMAP;
+        self.attributes.background_pixmap = back_pixmap;
+        *self
+    }
+
+    fn back_pixel(&mut self, back_pixel: u64) -> Self {
+        self.mask = self.mask | WindowAttributes::CWBACK_PIXEL;
+        self.attributes.background_pixel = back_pixel;
+        *self
+    }
+
+    fn border_pixmap(&mut self, border_pixmap: u64) -> Self {
+        self.mask = self.mask | WindowAttributes::CWBORDER_PIXMAP;
+        self.attributes.border_pixmap = border_pixmap;
+        *self
+    }
+
+    fn border_pixel(&mut self, border_pixel: u64) -> Self {
+        self.mask = self.mask | WindowAttributes::CWBORDER_PIXEL;
+        self.attributes.border_pixel = border_pixel;
+        *self
+    }
+
+    fn bit_gravity(&mut self, bit_gravity: i32) -> Self {
+        self.mask = self.mask | WindowAttributes::CWBIT_GRAVITY;
+        self.attributes.bit_gravity = bit_gravity;
+        *self
+    }
+
+    fn win_gravity(&mut self, win_gravity: i32) -> Self {
+        self.mask = self.mask | WindowAttributes::CWWIN_GRAVITY;
+        self.attributes.win_gravity = win_gravity;
+        *self
+    }
+
+    fn backing_store(&mut self, backing_store: i32) -> Self {
+        self.mask = self.mask | WindowAttributes::CWBACKING_STORE;
+        self.attributes.backing_store = backing_store;
+        *self
+    }
+
+    fn backing_planes(&mut self, backing_planes: u64) -> Self {
+        self.mask = self.mask | WindowAttributes::CWBACKING_PLANES;
+        self.attributes.backing_planes = backing_planes;
+        *self
+    }
+
+    fn backing_pixel(&mut self, backing_pixel: u64) -> Self {
+        self.mask = self.mask | WindowAttributes::CWBACKING_PIXEL;
+        self.attributes.backing_pixel = backing_pixel;
+        *self
+    }
+
+    fn save_under(&mut self, save_under: i32) -> Self {
+        self.mask = self.mask | WindowAttributes::CWSAVE_UNDER;
+        self.attributes.save_under = save_under;
+        *self
+    }
+
+    fn event_mask(&mut self, event_mask: i64) -> Self {
+        self.mask = self.mask | WindowAttributes::CWEVENT_MASK;
+        self.attributes.event_mask = event_mask;
+        *self
+    }
+
+    fn do_not_propagate_mask(&mut self, do_not_propagate_mask: i64) -> Self {
+        self.mask = self.mask | WindowAttributes::CWDONT_PROPAGATE;
+        self.attributes.do_not_propagate_mask = do_not_propagate_mask;
+        *self
+    }
+
+    fn override_redirect(&mut self, override_redirect: i32) -> Self {
+        self.mask = self.mask | WindowAttributes::CWOVERRIDE_REDIRECT;
+        self.attributes.override_redirect = override_redirect;
+        *self
+    }
+
+    fn color_map(&mut self, color_map: u64) -> Self {
+        self.mask = self.mask | WindowAttributes::CWCOLORMAP;
+        self.attributes.colormap = color_map;
+        *self
+    }
+
+    fn cursor(&mut self, cursor: u64) -> Self {
+        self.mask = self.mask | WindowAttributes::CWCURSOR;
+        self.attributes.cursor = cursor;
+        *self
+    }
+}
+
+//#################################################################################################################################
+//
+// Window builder
+//
+// Sets up the arguments for the XCreateWindow call allowing default values for arguments to be used without having to specify all
+// the arguments. The default function is called first and any arguments that need to be set can be chained of it. The last function
+// in the chain must be create.
+//
+// Technically, the title is not part of the XCreateWindow call. But it's so closely linked to the creation of a window that its
+// appropriate to include it in the builder's methods.
+//
+// Example:
+// The following uses a default border width of 5 and default class of InputOutput.
+//
+//  let window = WindowBuilder::default()
+//     .set_origin(0, 0)
+//     .set_size(400, 300)
+//     .set_depth(display.depth())
+//     .set_visual(null_mut())
+//     .set_value_mask(xlib::CWBackPixel)
+//     .set_attributes(&mut attributes)
+//     .set_title("Hello World".to_string())
+//     .create(display.display(), display.root_window());
+//
+#[derive(Clone, PartialEq, Debug)]
 #[allow(dead_code)]
 struct WindowBuilder {
-    display: *mut xlib::Display,
-    root: c_ulong,
     x: c_int,
     y: c_int,
     w: c_uint,
@@ -519,8 +1035,6 @@ struct WindowBuilder {
 impl Default for WindowBuilder {
     fn default() -> Self {
         WindowBuilder {
-            display: null_mut(),
-            root: 0,
             x: 0,
             y: 0,
             w: 0,
@@ -555,21 +1069,21 @@ impl WindowBuilder {
     }
 
     pub fn set_class(self, class: WindowClasses) -> Self {
-        WindowBuilder { class:class  as c_int, ..self }
+        WindowBuilder {
+            class: class as c_int,
+            ..self
+        }
     }
 
     pub fn set_visual(self, visual: *mut xlib::Visual) -> Self {
         WindowBuilder { visual, ..self }
     }
 
-    pub fn set_value_mask(self, value_mask: c_ulong) -> Self {
-        WindowBuilder { value_mask, ..self }
+    pub fn set_attributes(mut self, mut attributes: WindowAttributeBuilder) -> Self {
+        self.value_mask = attributes.mask;
+        self.attributes = &mut attributes.attributes;
+        self
     }
-
-    pub fn set_attributes(self, attributes: *mut xlib::XSetWindowAttributes ) -> Self {
-        WindowBuilder { attributes, ..self }
-    }
-
     pub fn set_title(self, title: String) -> Self {
         WindowBuilder { title, ..self }
     }
@@ -592,7 +1106,6 @@ impl WindowBuilder {
             );
 
             if !self.title.is_empty() {
-                // let title_str = CString::new("hello-world").unwrap();
                 xlib::XStoreName(display, window, self.title.as_ptr() as *mut c_char);
             }
             window
@@ -600,6 +1113,241 @@ impl WindowBuilder {
     }
 }
 
+//#################################################################################################################################
+//
+// Display maniuplation
+//
+// Allows opening the display with automatic closing of it when it goes out of scope. Some useful functions tacked on.
+//
+#[derive(Clone, PartialEq, Debug)]
+#[allow(dead_code)]
+struct Display {
+    display: *mut xlib::Display,
+    screen: i32,
+    root_window: u64,
+    depth: i32,
+}
+
+#[allow(dead_code)]
+impl Display {
+    fn new() -> Self {
+        println!("Display opened");
+        unsafe {
+            let display = xlib::XOpenDisplay(ptr::null());
+            if display.is_null() {
+                panic!("XOpenDisplay failed");
+            }
+
+            println!("display={:p}", display);
+
+            let txd = display as *const c_void;
+            let xd = txd as *const XDisplay;
+            println!(
+                "XDisplay vendor is {:?}",
+                std::ffi::CStr::from_ptr((*xd).vendor)
+            );
+            println!(
+                "XDisplay display_name is {:?}",
+                std::ffi::CStr::from_ptr((*xd).display_name)
+            );
+            println!("XDisplay default_screen is {:?}", (*xd).default_screen);
+            println!("XDisplay nscreens is {:?}", (*xd).nscreens);
+            println!(
+                "XDisplay screen 0 {} x {}",
+                (*(*xd).screens).width,
+                (*(*xd).screens).height
+            );
+
+            let screen = xlib::XDefaultScreen(display);
+            let root_window = xlib::XRootWindow(display, screen);
+            let depth = xlib::XDefaultDepth(display, screen);
+
+            Display {
+                display,
+                screen,
+                root_window,
+                depth,
+            }
+        }
+    }
+
+    fn display(&mut self) -> *mut xlib::Display {
+        self.display
+    }
+
+    fn screen(&mut self) -> i32 {
+        self.screen
+    }
+
+    fn root_window(&mut self) -> u64 {
+        self.root_window
+    }
+
+    fn depth(&mut self) -> i32 {
+        self.depth
+    }
+
+    fn print_dimensions(&self) {
+        unsafe {
+            println!(
+                "{} x {}",
+                xlib::XDisplayWidth(self.display, self.screen),
+                xlib::XDisplayHeight(self.display, self.screen)
+            );
+            println!(
+                "{}mm x {}mm",
+                xlib::XDisplayWidthMM(self.display, self.screen),
+                xlib::XDisplayHeightMM(self.display, self.screen)
+            );
+        }
+    }
+
+    fn get_selection_owner(&self, selection: String) -> String {
+        unsafe {
+            let string = format!(
+                "{} 0x{:02X}",
+                selection,
+                xlib::XGetSelectionOwner(
+                    self.display,
+                    xlib::XInternAtom(
+                        self.display,
+                        CString::new(selection.as_bytes())
+                            .unwrap()
+                            .to_owned()
+                            .as_ptr(),
+                        0
+                    )
+                )
+            );
+            string
+        }
+    }
+}
+
+impl Drop for Display {
+    fn drop(&mut self) {
+        unsafe {
+            let error_code:ErrorCodes = num::FromPrimitive::from_i32(xlib::XCloseDisplay(self.display)).unwrap();
+            if error_code != ErrorCodes::Success {
+                panic!("XCloseDisplay returned {}", error_code);
+            }
+        }
+    }
+}
+
+//#################################################################################################################################
+//
+// Font list
+//
+// Handle the creation and allocation of the font list and implement automatic release of the memory used by the font list when the
+// variable goes out of scope.
+//
+#[derive(Clone, PartialEq, Debug)]
+#[allow(dead_code)]
+struct FontList {
+    cfontlist: *mut *mut i8,
+    count: c_int,
+}
+
+#[allow(dead_code)]
+impl FontList {
+    fn new(display: &mut Display) -> Self {
+        unsafe {
+            let mut count: c_int = 0;
+            let fontpat: CString = CString::new("*").unwrap();
+            let cfontlist: *mut *mut i8 =
+                xlib::XListFonts(display.display(), fontpat.as_ptr(), 10000, &mut count);
+            FontList { cfontlist, count }
+        }
+    }
+
+    fn count(&self) -> i32 {
+        self.count
+    }
+
+    fn list(&self) -> Vec<String> {
+        let mut list = Vec::new();
+
+        unsafe {
+            let fontslice = std::slice::from_raw_parts(self.cfontlist, self.count as usize);
+            for part in fontslice {
+                let name = std::ffi::CStr::from_ptr(*part);
+                // println!("{:?}", f);
+                list.push(name.to_str().unwrap().to_owned());
+            }
+        }
+
+        list
+    }
+}
+
+impl Drop for FontList {
+    fn drop(&mut self) {
+        unsafe {
+            // xlib::XFreeFontNames(self.cfontlist);
+            if xlib::XFreeFontNames(self.cfontlist) == 0 {
+                panic!("XFreeFontNames returned 0 ");
+            }
+        }
+    }
+}
+
+//#################################################################################################################################
+//
+// Font structure
+//
+// Handle the creation and allocation of the font structure and implement automatic release of the memory used by it when the
+// variable goes out of scope.
+//
+#[derive(Clone, PartialEq, Debug)]
+#[allow(dead_code)]
+struct Font {
+    display: *mut Display,
+    font: *mut xlib::XFontStruct,
+}
+
+#[allow(dead_code)]
+impl Font {
+    fn new(display: &mut Display, name: String) -> Self {
+        unsafe {
+            let font =
+                xlib::XLoadQueryFont(display.display(), name.as_bytes().as_ptr() as *const i8);
+            if font.is_null() {
+                panic!("*** No font {} found ***\n", name);
+            }
+            Font { display, font }
+        }
+    }
+
+    fn font(&self) -> *mut xlib::XFontStruct {
+        self.font
+    }
+
+    fn id(&self) -> c_ulong {
+        unsafe { (*self.font).fid }
+    }
+
+    fn properties(&self) -> i32 {
+        unsafe { (*self.font).n_properties }
+    }
+}
+
+impl Drop for Font {
+    fn drop(&mut self) {
+        unsafe {
+            if xlib::XFreeFont(
+                (*(self.display)).display(),
+                self.font,
+            ) == 0 {
+                panic!("XFreeFont returned 0");
+            }
+        }
+    }
+}
+//=================================================================================================================================
+//
+// Get the pixel value for a named colour.
+//
 fn pixel_value_for_colour(display: *mut xlib::Display, screen: c_int, color: &str) -> c_ulong {
     let mut xcolour: xlib::XColor = xlib::XColor {
         pixel: 0,
@@ -618,138 +1366,45 @@ fn pixel_value_for_colour(display: *mut xlib::Display, screen: c_int, color: &st
     xcolour.pixel
 }
 
-struct XDisplay {
-    d:*mut xlib::Display,
-}
-
-impl XDisplay {
-    fn new() -> Self {
-        println!("Display opened");
-        unsafe {
-            let display = xlib::XOpenDisplay(ptr::null());
-            if display.is_null() {
-                panic!("XOpenDisplay failed");
-            }
-            XDisplay {
-                d:display
-            }
-        }
-    }
-
-    fn display(&mut self) -> *mut xlib::Display {
-        self.d
-    }
-}
-
-impl Drop for XDisplay {
-    fn drop(&mut self) {
-        unsafe {
-            println!("Display closed");
-            xlib::XCloseDisplay(self.d);
-        }
-    }
-}
-
 fn main() {
     unsafe {
-        // Open display connection.
-        // let display = xlib::XOpenDisplay(ptr::null());
-        // if display.is_null() {
-        //     panic!("XOpenDisplay failed");
-        // }
+        let mut display = Display::new();
 
-        let mut display = XDisplay::new();
+        xlib::XSynchronize(display.display(), 0);
 
-        println!(
-            "PRIMARY 0x{:02X}",
-            xlib::XGetSelectionOwner(
-                display.display(),
-                xlib::XInternAtom(
-                    display.display(),
-                    CString::new("PRIMARY").unwrap().to_owned().as_ptr(),
-                    0
-                )
-            )
-        );
-        println!(
-            "SECONDARY 0x{:02X}",
-            xlib::XGetSelectionOwner(
-                display.display(),
-                xlib::XInternAtom(
-                    display.display(),
-                    CString::new("SECONDARY").unwrap().to_owned().as_ptr(),
-                    0
-                )
-            )
-        );
-        println!(
-            "CLIPBOARD 0x{:02X}",
-            xlib::XGetSelectionOwner(
-                display.display(),
-                xlib::XInternAtom(
-                    display.display(),
-                    CString::new("CLIPBOARD").unwrap().to_owned().as_ptr(),
-                    0
-                )
-            )
-        );
-        println!(
-            "FOOBAR 0x{:02X}",
-            xlib::XGetSelectionOwner(
-                display.display(),
-                xlib::XInternAtom(
-                    display.display(),
-                    CString::new("FOOBAR").unwrap().to_owned().as_ptr(),
-                    0
-                )
-            )
-        );
+        println!("{}", display.get_selection_owner("PRIMARY".to_string()));
+        println!("{}", display.get_selection_owner("SECONDARY".to_string()));
+        println!("{}", display.get_selection_owner("CLIPBOARD".to_string()));
+        println!("{}", display.get_selection_owner("FOOBAR".to_string()));
 
-        // Get x11 windows
-        let screen = xlib::XDefaultScreen(display.display());
-        let root = xlib::XRootWindow(display.display(), screen);
-        let depth = xlib::XDefaultDepth(display.display(), screen);
-
-        println!("Screen={}, Root={}", screen, root);
-        println!(
-            "{} x {}",
-            xlib::XDisplayWidth(display.display(), screen),
-            xlib::XDisplayHeight(display.display(), screen)
-        );
-        println!(
-            "{} x {}",
-            xlib::XDisplayWidthMM(display.display(), screen),
-            xlib::XDisplayHeightMM(display.display(), screen)
-        );
-
-        // Set background to white. Requires uninit since the attribute structure is not initialised except for the background.
-        let mut attributes: MaybeUninit<xlib::XSetWindowAttributes> =
-            MaybeUninit::uninit().assume_init();
-        let attr_ptr = attributes.as_mut_ptr();
-        std::ptr::addr_of_mut!((*attr_ptr).background_pixel)
-            .write(xlib::XWhitePixel(display.display(), screen));
-        let mut attributes = attributes.assume_init();
+        display.print_dimensions();
 
         // Create the window
         let window = WindowBuilder::default()
             .set_origin(0, 0)
             .set_size(400, 300)
             .set_border(5)
-            .set_depth(depth)
+            .set_depth(display.depth())
             .set_class(WindowClasses::InputOutput)
             .set_visual(null_mut())
-            .set_value_mask(xlib::CWBackPixel)
-            .set_attributes(&mut attributes)
+            .set_attributes(
+                WindowAttributeBuilder::default()
+                    .back_pixel(xlib::XWhitePixel(display.display(), display.screen())),
+            )
             .set_title("Hello World".to_string())
-            .create(display.display(), root);
+            .create(display.display(), display.root_window());
 
         // Hook close requests.
         let wm_protocols_str = CString::new("WM_PROTOCOLS").unwrap();
         let wm_delete_window_str = CString::new("WM_DELETE_WINDOW").unwrap();
 
-        let wm_protocols = xlib::XInternAtom(display.display(), wm_protocols_str.as_ptr(), xlib::False);
-        let wm_delete_window =
-            xlib::XInternAtom(display.display(), wm_delete_window_str.as_ptr(), xlib::False);
+        let wm_protocols =
+            xlib::XInternAtom(display.display(), wm_protocols_str.as_ptr(), xlib::False);
+        let wm_delete_window = xlib::XInternAtom(
+            display.display(),
+            wm_delete_window_str.as_ptr(),
+            xlib::False,
+        );
 
         let mut protocols = [wm_delete_window];
 
@@ -760,64 +1415,66 @@ fn main() {
             protocols.len() as c_int,
         );
 
-        let mut countret: c_int = 0;
-        let fontpat: CString = CString::new("*").unwrap();
-        let cfontlist: *mut *mut i8 =
-            xlib::XListFonts(display.display(), fontpat.as_ptr(), 10000, &mut countret);
-        println!("Total number of fonts={}", countret);
-        // let fontslice = std::slice::from_raw_parts(cfontlist, countret as usize);
-        // for part in fontslice {
-        //     let f = CStr::from_ptr(*part);
-        //     println!("{:?}", f);
-        // }
-        xlib::XFreeFontNames(cfontlist);
+        let fontlist = FontList::new(&mut display);
+        println!("Number of fonts installed is {}", fontlist.count());
+        // let l = fontlist.list();
+        // println!("{:?}", l);
 
-        // let font = xlib::XLoadQueryFont(display, "-bitstream-courier 10 pitch-bold-r-normal--0-0-200-200-m-0-iso8859-1".as_ptr() as *const i8);
-        // let fontstr = CString::new("Monospaced").unwrap();
-        // let font = xlib::XLoadQueryFont(display, fontstr.as_ptr());
-        let fontname = CString::new("lucidasanstypewriter-bold-24").unwrap();
-        let fontid = xlib::XLoadFont(display.display(), fontname.as_ptr());
-        let font = xlib::XQueryFont(display.display(), fontid);
+        let fontinfo = Font::new(&mut display, "lucidasanstypewriter-bold-24".into());
+        println!("{:?}", fontinfo);
         println!(
             "FontID=0x{:02X} Properties=0x{:02X?}",
-            (*font).fid,
-            (*font).n_properties
+            (*(fontinfo.font())).fid,
+            (*(fontinfo.font())).n_properties
         );
-        if font.is_null() {
-            println!("*** No font ***\n");
-            panic!();
-        }
+        // xlib::XUnloadFont(display.display(), fontinfo.id());
 
         // Setup some graphic contexts for different colours
 
+        // let default_gc = GraphicContextBuilder::default()
+        //     .set_font(fontinfo.id())
+        //     .create(display.display(), window);
+
         let red_gc = GraphicContextBuilder::default()
-            .set_background_colour(xlib::XWhitePixel(display.display(), screen))
-            .set_foreground_colour(pixel_value_for_colour(display.display(), screen, "red"))
-            .set_font_from_string(display.display(), "lucidasanstypewriter-bold-24")
+            .set_background_colour(xlib::XWhitePixel(display.display(), display.screen()))
+            .set_foreground_colour(pixel_value_for_colour(
+                display.display(),
+                display.screen(),
+                "red",
+            ))
+            .set_font(fontinfo.id())
             .create(display.display(), window);
 
         let green_gc = GraphicContextBuilder::default()
-            .set_background_colour(xlib::XWhitePixel(display.display(), screen))
-            .set_foreground_colour(pixel_value_for_colour(display.display(), screen, "green"))
-            .set_font_from_string(display.display(), "lucidasanstypewriter-bold-24")
+            .set_background_colour(xlib::XWhitePixel(display.display(), display.screen()))
+            .set_foreground_colour(pixel_value_for_colour(
+                display.display(),
+                display.screen(),
+                "green",
+            ))
+            .set_font(fontinfo.id())
             .create(display.display(), window);
 
         let blue_gc = GraphicContextBuilder::default()
-            .set_background_colour(xlib::XWhitePixel(display.display(), screen))
-            .set_foreground_colour(pixel_value_for_colour(display.display(), screen, "purple"))
-            .set_font_from_string(display.display(), "lucidasanstypewriter-bold-24")
+            .set_background_colour(xlib::XWhitePixel(display.display(), display.screen()))
+            .set_foreground_colour(pixel_value_for_colour(
+                display.display(),
+                display.screen(),
+                "blue",
+            ))
+            .set_font(fontinfo.id())
             .create(display.display(), window);
 
         let white_gc = GraphicContextBuilder::default()
-            .set_background_colour(xlib::XWhitePixel(display.display(), screen))
-            .set_foreground_colour(xlib::XWhitePixel(display.display(), screen))
-            .set_font_from_string(display.display(), "lucidasanstypewriter-bold-24")
+            .set_background_colour(xlib::XWhitePixel(display.display(), display.screen()))
+            .set_foreground_colour(xlib::XWhitePixel(display.display(), display.screen()))
+            .set_font(fontinfo.id())
             .create(display.display(), window);
 
         let black_gc = GraphicContextBuilder::default()
-            .set_background_colour(xlib::XWhitePixel(display.display(), screen))
-            .set_foreground_colour(xlib::XBlackPixel(display.display(), screen))
-            .set_font_from_string(display.display(), "lucidasanstypewriter-bold-24")
+            .set_background_colour(xlib::XWhitePixel(display.display(), display.screen()))
+            .set_foreground_colour(xlib::XBlackPixel(display.display(), display.screen()))
+            .set_font(fontinfo.id())
             .create(display.display(), window);
 
         let mut gc = black_gc;
@@ -843,15 +1500,12 @@ fn main() {
         let mut event: xlib::XEvent = mem::MaybeUninit::uninit().assume_init();
         loop {
             xlib::XNextEvent(display.display(), &mut event);
-
             let xtype: c_int = event.get_type();
             match xtype {
                 xlib::ClientMessage => {
                     let xclient = xlib::XClientMessageEvent::from(event);
-
                     if xclient.message_type == wm_protocols && xclient.format == 32 {
                         let protocol = xclient.data.get_long(0) as xlib::Atom;
-
                         if protocol == wm_delete_window {
                             break;
                         }
@@ -861,13 +1515,17 @@ fn main() {
                 }
                 xlib::KeyPress => {
                     let xkey = xlib::XKeyEvent::from(event);
-                    let xsym = xlib::XKeycodeToKeysym(display.display(), xkey.keycode.try_into().unwrap(), 0);
-                    let xstr = std::ffi::CStr::from_ptr(xlib::XKeysymToString(xsym))
-                        .to_owned()
-                        .into_string()
-                        .unwrap();
+                    let xsym = xlib::XKeycodeToKeysym(
+                        display.display(),
+                        xkey.keycode.try_into().unwrap(),
+                        0,
+                    );
                     if xsym != xlib::NoSymbol.try_into().unwrap() {
-                        println!("Key {} {} {}", xkey.keycode, xsym, xstr);
+                        // let xstr = std::ffi::CStr::from_ptr(xlib::XKeysymToString(xsym))
+                        //     .to_owned()
+                        //     .into_string()
+                        //     .unwrap();
+                        // println!("Key {} {} {}", xkey.keycode, xsym, xstr);
                         if xsym == 32 {
                             k = true;
                         }
@@ -875,10 +1533,14 @@ fn main() {
                 }
                 xlib::KeyRelease => {
                     let xkey = xlib::XKeyEvent::from(event);
-                    let xsym = xlib::XKeycodeToKeysym(display.display(), xkey.keycode.try_into().unwrap(), 0);
+                    let xsym = xlib::XKeycodeToKeysym(
+                        display.display(),
+                        xkey.keycode.try_into().unwrap(),
+                        0,
+                    );
                     if xsym != xlib::NoSymbol.try_into().unwrap() {
                         if xsym == 113 {
-                            return;
+                            break;
                         } else if xsym == 32 {
                             k = false;
                         }
@@ -915,7 +1577,7 @@ fn main() {
                     x = xbutton.x;
                     y = xbutton.y;
                     b = true;
-                    println!("Button {} {} {}", xbutton.button, x, y);
+                    // println!("Button {} {} {}", xbutton.button, x, y);
                     xlib::XDrawString(
                         display.display(),
                         window,
@@ -994,7 +1656,6 @@ fn main() {
             }
         }
 
-        // Shut down.
-        // xlib::XCloseDisplay(display.display());
+        println!("Shutting down");
     }
 }

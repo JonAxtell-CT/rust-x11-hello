@@ -16,3 +16,6 @@ edition = "2021"
 #x11-dl = "2.14.0"
 #dbus = "0.5.3"
 x11 = { version = "2.21.0", features = ["xlib"] }
+num = "0.4"
+num-derive = "0.3"
+num-traits = "0.2"
