@@ -242,7 +242,7 @@ struct XDisplay {
 //
 // Graphic functions
 //
-#[derive(Copy, Clone, PartialEq, Debug)]
+#[derive(Copy, Clone, PartialEq, FromPrimitive, Debug)]
 #[allow(dead_code)]
 enum GraphicContextFunctions {
     GXclear = 0x0,
@@ -267,7 +267,7 @@ enum GraphicContextFunctions {
 //
 // LineStyle
 //
-#[derive(Copy, Clone, PartialEq, Debug)]
+#[derive(Copy, Clone, PartialEq, FromPrimitive, Debug)]
 #[allow(dead_code)]
 enum GraphicContextLineStyles {
     LineSolid = 0,
@@ -276,7 +276,7 @@ enum GraphicContextLineStyles {
 }
 
 // capStyle
-#[derive(Copy, Clone, PartialEq, Debug)]
+#[derive(Copy, Clone, PartialEq, FromPrimitive, Debug)]
 #[allow(dead_code)]
 enum GraphicContextCapStyles {
     CapNotLast = 0,
@@ -289,7 +289,7 @@ enum GraphicContextCapStyles {
 //
 // joinStyle
 //
-#[derive(Copy, Clone, PartialEq, Debug)]
+#[derive(Copy, Clone, PartialEq, FromPrimitive, Debug)]
 #[allow(dead_code)]
 enum GraphicContextJoinStyles {
     JoinMiter = 0,
@@ -301,7 +301,7 @@ enum GraphicContextJoinStyles {
 //
 // fillStyle
 //
-#[derive(Copy, Clone, PartialEq, Debug)]
+#[derive(Copy, Clone, PartialEq, FromPrimitive, Debug)]
 #[allow(dead_code)]
 enum GraphicContextFillStyles {
     FillSolid = 0,
@@ -314,7 +314,7 @@ enum GraphicContextFillStyles {
 //
 // fillRule
 //
-#[derive(Copy, Clone, PartialEq, Debug)]
+#[derive(Copy, Clone, PartialEq, FromPrimitive, Debug)]
 #[allow(dead_code)]
 enum GraphicContextFillRules {
     EvenOddRule = 0,
@@ -325,7 +325,7 @@ enum GraphicContextFillRules {
 //
 // Arc modes for PolyFillArc
 //
-#[derive(Copy, Clone, PartialEq, Debug)]
+#[derive(Copy, Clone, PartialEq, FromPrimitive, Debug)]
 #[allow(dead_code)]
 enum GraphicContextArcModes {
     ArcChord = 0,
@@ -336,7 +336,7 @@ enum GraphicContextArcModes {
 //
 // subwindow mode
 //
-#[derive(Copy, Clone, PartialEq, Debug)]
+#[derive(Copy, Clone, PartialEq, FromPrimitive, Debug)]
 #[allow(dead_code)]
 enum GraphicContextSubWindowModes {
     ClipByChildren = 0,
@@ -347,7 +347,7 @@ enum GraphicContextSubWindowModes {
 //
 // Graphic exposure
 //
-#[derive(Copy, Clone, PartialEq, Debug)]
+#[derive(Copy, Clone, PartialEq, FromPrimitive, Debug)]
 #[allow(dead_code)]
 enum GraphicContextGraphicExposure {
     CopyArea = 0,
@@ -358,7 +358,7 @@ enum GraphicContextGraphicExposure {
 //
 // window classes
 //
-#[derive(Copy, Clone, PartialEq, Debug)]
+#[derive(Copy, Clone, PartialEq, FromPrimitive, Debug)]
 #[allow(dead_code)]
 enum WindowClasses {
     InputOutput = 1,
@@ -375,7 +375,7 @@ enum WindowClasses {
 // The fmt function of the Display trait is implemented to allow the human readable form of the error code to be output.
 //      println!("Result={}", error_code);
 //
-#[derive(Debug, Copy, Clone, PartialEq, FromPrimitive)]
+#[derive(Copy, Clone, PartialEq, FromPrimitive, Debug)]
 #[allow(dead_code)]
 enum ErrorCodes {
     Success = 0,
@@ -832,12 +832,14 @@ impl GraphicContextBuilder {
 
 //#################################################################################################################################
 //
-// Window attributes and its builder
+// Window attributes and it's builder
 //
 // The attributes are used when a window is created. The XCreateWindow uses two arguments to set the attributes, a flag and a
 // structure with the flag indicating which fields in the structure are actually in use. The window attribute builder will set
 // the flag and the appropriate field in the structure. The two components will then be passed as seperate arguments when the
 // window is created.
+//
+// These are bitmap flags and designed to be OR'd together if multiple fields in the structure have been set.
 //
 #[allow(dead_code, non_snake_case)]
 pub mod WindowAttributes {
@@ -870,7 +872,7 @@ struct WindowAttributeBuilder {
 impl Default for WindowAttributeBuilder {
     fn default() -> Self {
         WindowAttributeBuilder {
-            mask: num::FromPrimitive::from_i32(0).unwrap(),
+            mask: 0,
             attributes: xlib::XSetWindowAttributes {
                 background_pixmap: 0,
                 background_pixel: 0,
@@ -1088,11 +1090,11 @@ impl WindowBuilder {
         WindowBuilder { title, ..self }
     }
 
-    pub fn create(self, display: *mut xlib::Display, root: c_ulong) -> c_ulong {
+    pub fn create(self, display:&Display) -> c_ulong { //},  display: *mut xlib::Display, root: c_ulong) -> c_ulong {
         unsafe {
             let window: c_ulong = xlib::XCreateWindow(
-                display,              // Display
-                root,                 // Root window
+                display.display,              // Display
+                display.root_window,                 // Root window
                 self.x,               // x
                 self.y,               // y
                 self.w,               // w
@@ -1106,7 +1108,7 @@ impl WindowBuilder {
             );
 
             if !self.title.is_empty() {
-                xlib::XStoreName(display, window, self.title.as_ptr() as *mut c_char);
+                xlib::XStoreName(display.display, window, self.title.as_ptr() as *mut c_char);
             }
             window
         }
@@ -1126,6 +1128,8 @@ struct Display {
     screen: i32,
     root_window: u64,
     depth: i32,
+    wm_protocols: c_ulong,
+    wm_delete_window: c_ulong,
 }
 
 #[allow(dead_code)]
@@ -1162,11 +1166,24 @@ impl Display {
             let root_window = xlib::XRootWindow(display, screen);
             let depth = xlib::XDefaultDepth(display, screen);
 
+            // Get protocols and delete window notification configured for use by the hook_close_request function
+            let wm_protocols_str = CString::new("WM_PROTOCOLS").unwrap();
+            let wm_protocols =
+                xlib::XInternAtom(display, wm_protocols_str.as_ptr(), xlib::False);
+            let wm_delete_window_str = CString::new("WM_DELETE_WINDOW").unwrap();
+            let wm_delete_window = xlib::XInternAtom(
+                display,
+                wm_delete_window_str.as_ptr(),
+                xlib::False,
+            );
+
             Display {
                 display,
                 screen,
                 root_window,
                 depth,
+                wm_protocols,
+                wm_delete_window,
             }
         }
     }
@@ -1222,6 +1239,21 @@ impl Display {
             string
         }
     }
+
+    fn hook_close_requests(&self, window:c_ulong) {
+
+        unsafe {
+            let mut protocols = [self.wm_delete_window];
+
+            xlib::XSetWMProtocols(
+                self.display,
+                window,
+                protocols.as_mut_ptr(),
+                protocols.len() as c_int,
+            );
+        }
+    }
+
 }
 
 impl Drop for Display {
@@ -1269,7 +1301,9 @@ impl FontList {
         let mut list = Vec::new();
 
         unsafe {
-            let fontslice = std::slice::from_raw_parts(self.cfontlist, self.count as usize);
+            let fontslice = std::slice::from_raw_parts(self.cfontlist,         // let wm_protocols_str = CString::new("WM_PROTOCOLS").unwrap();
+            // let wm_delete_window_str = CString::new("WM_DELETE_WINDOW").unwrap();
+    self.count as usize);
             for part in fontslice {
                 let name = std::ffi::CStr::from_ptr(*part);
                 // println!("{:?}", f);
@@ -1306,6 +1340,23 @@ struct Font {
     font: *mut xlib::XFontStruct,
 }
 
+pub unsafe fn xfontstruct_arguments(len:usize) -> &'static [xlib::XFontStruct] {
+    extern "C" {
+        pub static xfontstruct_arguments: *const xlib::XFontStruct;
+    }
+
+    // let len = (0..)
+    //     .take_while(|i| {
+    //         let arg = xfontstruct_arguments.offset(*i);
+    //         (*arg).ext_data != std::ptr::null_mut()
+    //             || (*arg).fid != 0
+    //             || (*arg).direction != 0
+    //     })
+    //     .count();
+
+    std::slice::from_raw_parts(xfontstruct_arguments, len)
+}
+
 #[allow(dead_code)]
 impl Font {
     fn new(display: &mut Display, name: String) -> Self {
@@ -1327,13 +1378,27 @@ impl Font {
         unsafe { (*self.font).fid }
     }
 
-    fn properties(&self) -> i32 {
+    fn num_properties(&self) -> i32 {
         unsafe { (*self.font).n_properties }
     }
+
+    pub unsafe fn property(&self, idx:usize) -> Vec<xlib::XFontProp> {
+        extern "C" {
+            pub static fontstruct:*mut xlib::XFontStruct;
+        }
+
+        std::slice::from_raw_parts(fontstruct, idx)
+            .iter()
+            .map(|args| xlib::XFontProp { card32: 0, name: 0 })
+            .collect()
+        // (*self.font).properties
+    }
+
 }
 
 impl Drop for Font {
     fn drop(&mut self) {
+        println!("XFreeFont");
         unsafe {
             if xlib::XFreeFont(
                 (*(self.display)).display(),
@@ -1366,6 +1431,13 @@ fn pixel_value_for_colour(display: *mut xlib::Display, screen: c_int, color: &st
     xcolour.pixel
 }
 
+//#################################################################################################################################
+//
+// Main
+//
+// Put up a small window and when the user clicks the mouse button and drags the mouse around the window, animate some text being
+// dragged around with the mouse. Different colours will be used depending on which mouse button is clicked.
+//
 fn main() {
     unsafe {
         let mut display = Display::new();
@@ -1392,42 +1464,23 @@ fn main() {
                     .back_pixel(xlib::XWhitePixel(display.display(), display.screen())),
             )
             .set_title("Hello World".to_string())
-            .create(display.display(), display.root_window());
+            .create(&display); //.display(), display.root_window());
 
         // Hook close requests.
-        let wm_protocols_str = CString::new("WM_PROTOCOLS").unwrap();
-        let wm_delete_window_str = CString::new("WM_DELETE_WINDOW").unwrap();
-
-        let wm_protocols =
-            xlib::XInternAtom(display.display(), wm_protocols_str.as_ptr(), xlib::False);
-        let wm_delete_window = xlib::XInternAtom(
-            display.display(),
-            wm_delete_window_str.as_ptr(),
-            xlib::False,
-        );
-
-        let mut protocols = [wm_delete_window];
-
-        xlib::XSetWMProtocols(
-            display.display(),
-            window,
-            protocols.as_mut_ptr(),
-            protocols.len() as c_int,
-        );
+        display.hook_close_requests(window);
 
         let fontlist = FontList::new(&mut display);
         println!("Number of fonts installed is {}", fontlist.count());
         // let l = fontlist.list();
         // println!("{:?}", l);
 
-        let fontinfo = Font::new(&mut display, "lucidasanstypewriter-bold-24".into());
-        println!("{:?}", fontinfo);
+        let font_lucida_sans_typewriter = Font::new(&mut display, "lucidasanstypewriter-bold-24".into());
+        // println!("{:?}", fontinfo);
         println!(
-            "FontID=0x{:02X} Properties=0x{:02X?}",
-            (*(fontinfo.font())).fid,
-            (*(fontinfo.font())).n_properties
+            "lucidasanstypewriter-bold-24 - FontID=0x{:02X} Properties={}",
+            font_lucida_sans_typewriter.id(),
+            font_lucida_sans_typewriter.num_properties()
         );
-        // xlib::XUnloadFont(display.display(), fontinfo.id());
 
         // Setup some graphic contexts for different colours
 
@@ -1442,7 +1495,7 @@ fn main() {
                 display.screen(),
                 "red",
             ))
-            .set_font(fontinfo.id())
+            .set_font(font_lucida_sans_typewriter.id())
             .create(display.display(), window);
 
         let green_gc = GraphicContextBuilder::default()
@@ -1452,7 +1505,7 @@ fn main() {
                 display.screen(),
                 "green",
             ))
-            .set_font(fontinfo.id())
+            .set_font(font_lucida_sans_typewriter.id())
             .create(display.display(), window);
 
         let blue_gc = GraphicContextBuilder::default()
@@ -1462,19 +1515,19 @@ fn main() {
                 display.screen(),
                 "blue",
             ))
-            .set_font(fontinfo.id())
+            .set_font(font_lucida_sans_typewriter.id())
             .create(display.display(), window);
 
         let white_gc = GraphicContextBuilder::default()
             .set_background_colour(xlib::XWhitePixel(display.display(), display.screen()))
             .set_foreground_colour(xlib::XWhitePixel(display.display(), display.screen()))
-            .set_font(fontinfo.id())
+            .set_font(font_lucida_sans_typewriter.id())
             .create(display.display(), window);
 
         let black_gc = GraphicContextBuilder::default()
             .set_background_colour(xlib::XWhitePixel(display.display(), display.screen()))
             .set_foreground_colour(xlib::XBlackPixel(display.display(), display.screen()))
-            .set_font(fontinfo.id())
+            .set_font(font_lucida_sans_typewriter.id())
             .create(display.display(), window);
 
         let mut gc = black_gc;
@@ -1504,9 +1557,9 @@ fn main() {
             match xtype {
                 xlib::ClientMessage => {
                     let xclient = xlib::XClientMessageEvent::from(event);
-                    if xclient.message_type == wm_protocols && xclient.format == 32 {
+                    if xclient.message_type == display.wm_protocols && xclient.format == 32 {
                         let protocol = xclient.data.get_long(0) as xlib::Atom;
-                        if protocol == wm_delete_window {
+                        if protocol == display.wm_delete_window {
                             break;
                         }
                     } else {
